@@ -16,7 +16,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/soypat/rebed"
 	"golang.org/x/tools/present"
 )
 
@@ -69,10 +68,6 @@ func main() {
 		}
 		*basePath = p.Dir
 	}
-
-	// We attempt to create templates and static files if not present
-	rebed.Patch(tempFS, "")
-	rebed.Patch(staticFS, "")
 
 	err := initTemplates(*basePath)
 	if err != nil {
