@@ -1,4 +1,4 @@
-// Copyright 2013 The Go Authors.  All rights reserved.
+// Copyright 2013 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -8,7 +8,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
-	"go/build"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -19,24 +19,16 @@ import (
 	"golang.org/x/tools/present"
 )
 
-const basePkg = "golang.org/x/tools/cmd/present"
-
 var (
 	httpAddr      = flag.String("http", "127.0.0.1:3999", "HTTP service address (e.g., '127.0.0.1:3999')")
 	originHost    = flag.String("orighost", "", "host component of web origin URL (e.g., 'localhost')")
-	basePath      = flag.String("base", ".", "base path for slide template and static resources. default is current directory")
+	basePath      = flag.String("base", "", "base path for slide template and static resources")
 	contentPath   = flag.String("content", ".", "base path for presentation content")
 	usePlayground = flag.Bool("use_playground", false, "run code snippets using play.golang.org; if false, run them locally and deliver results by WebSocket transport")
-	nativeClient  = flag.Bool("nacl", false, "use Native Client environment playground (prevents non-Go code execution) when using local WebSocket transport")
 )
 
-// Embedded directories
-var (
-	//go:embed templates
-	tempFS embed.FS
-	//go:embed static
-	staticFS embed.FS
-)
+//go:embed static templates
+var embedFS embed.FS
 
 func main() {
 	flag.BoolVar(&present.PlayEnabled, "play", true, "enable playground (permit execution of arbitrary user code)")
@@ -59,17 +51,11 @@ func main() {
 		*contentPath = "./content/"
 	}
 
-	if *basePath == "" {
-		p, err := build.Default.Import(basePkg, "", build.FindOnly)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Couldn't find gopresent files: %v\n", err)
-			fmt.Fprintf(os.Stderr, basePathMessage, basePkg)
-			os.Exit(1)
-		}
-		*basePath = p.Dir
+	var fsys fs.FS = embedFS
+	if *basePath != "" {
+		fsys = os.DirFS(*basePath)
 	}
-
-	err := initTemplates(*basePath)
+	err := initTemplates(fsys)
 	if err != nil {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
@@ -108,11 +94,11 @@ func main() {
 		}
 	}
 
-	initPlayground(*basePath, origin)
-	http.Handle("/static/", http.FileServer(http.Dir(*basePath)))
+	initPlayground(fsys, origin)
+	http.Handle("/static/", http.FileServer(http.FS(fsys)))
 
 	if !ln.Addr().(*net.TCPAddr).IP.IsLoopback() &&
-		present.PlayEnabled && !*nativeClient && !*usePlayground {
+		present.PlayEnabled && !*usePlayground {
 		log.Print(localhostWarning)
 	}
 

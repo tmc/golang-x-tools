@@ -1,4 +1,4 @@
-// Copyright 2012 The Go Authors.  All rights reserved.
+// Copyright 2012 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -7,18 +7,15 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io/fs"
 	"net/http"
 	"net/url"
-	"path/filepath"
-	"runtime"
 	"time"
 
-	"golang.org/x/tools/godoc/static"
 	"golang.org/x/tools/playground/socket"
 	"golang.org/x/tools/present"
 
-	// This will register handlers at /compile and /share that will proxy to the
+	// This will register a handler at /compile that will proxy to the
 	// respective endpoints at play.golang.org. This allows the frontend to call
 	// these endpoints without needing cross-origin request sharing (CORS).
 	// Note that this is imported regardless of whether the endpoints are used or
@@ -26,20 +23,19 @@ import (
 	_ "golang.org/x/tools/playground"
 )
 
-var scripts = []string{"prism.js", "jquery.js", "jquery-ui.js", "playground.js", "play.js"}
+var scripts = []string{
+	"jquery.js", "jquery-ui.js", "playground.js", "play.js",
+	"prism.js",
+}
 
 // playScript registers an HTTP handler at /play.js that serves all the
 // scripts specified by the variable above, and appends a line that
 // initializes the playground with the specified transport.
-func playScript(root, transport string) {
+func playScript(fsys fs.FS, transport string) {
 	modTime := time.Now()
 	var buf bytes.Buffer
 	for _, p := range scripts {
-		if s, ok := static.Files[p]; ok {
-			buf.WriteString(s)
-			continue
-		}
-		b, err := ioutil.ReadFile(filepath.Join(root, "static", p))
+		b, err := fs.ReadFile(fsys, "static/"+p)
 		if err != nil {
 			panic(err)
 		}
@@ -53,27 +49,16 @@ func playScript(root, transport string) {
 	})
 }
 
-func initPlayground(basepath string, origin *url.URL) {
+func initPlayground(fsys fs.FS, origin *url.URL) {
 	if !present.PlayEnabled {
 		return
 	}
 	if *usePlayground {
-		playScript(basepath, "HTTPTransport")
+		playScript(fsys, "HTTPTransport")
 		return
 	}
 
-	if *nativeClient {
-		// When specifying nativeClient, non-Go code cannot be executed
-		// because the NaCl setup doesn't support doing so.
-		socket.RunScripts = false
-		socket.Environ = func() []string {
-			if runtime.GOARCH == "amd64" {
-				return environ("GOOS=nacl", "GOARCH=amd64p32")
-			}
-			return environ("GOOS=nacl")
-		}
-	}
-	playScript(basepath, "SocketTransport")
+	playScript(fsys, "SocketTransport")
 	http.Handle("/socket", socket.NewHandler(origin))
 }
 
