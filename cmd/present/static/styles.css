@@ -270,7 +270,7 @@
   font-size: 26px;
   line-height: 36px;
 
-  letter-spacing: -1px;
+  /* letter-spacing: -1px; */
 }
 
 b {
@@ -375,8 +375,9 @@ pre {
 
   font-family: 'Droid Sans Mono', 'Courier New', monospace;
   font-size: 18px;
-  line-height: 24px;
-  letter-spacing: -1px;
+  /* line-height: 24px; */
+  line-height: 22px;
+  /* letter-spacing: -1px; */
 
   color: black;
 }
@@ -480,7 +481,7 @@ div.output .exit {
 .buttons {
   position: relative;
   float: right;
-  top: -60px;
+  top: -70px;
   right: 10px;
 }
 div.output .buttons {
@@ -558,7 +559,7 @@ code {
   padding: 0.1em 0.3em;
   padding-top: 0.1em;
   padding-bottom: 0.2em;
-  background-color: antiquewhite;
+  /* background-color: antiquewhite; */
   font-weight: bold;
   color: black;
 }
