@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"go/parser"
 	"go/token"
 	"io"
@@ -340,6 +341,7 @@ func (p *process) startProcess(path string, args []string, body string) error {
 		Stdout: &messageWriter{kind: "stdout", out: p.out},
 		Stderr: &messageWriter{kind: "stderr", out: p.out},
 	}
+	fmt.Println(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -383,6 +385,23 @@ func (p *process) start(body string, opt *Options) error {
 			hasModfile = true
 		}
 	}
+	fmt.Println("hasModfile:", hasModfile)
+	if !hasModfile {
+		// if  "PRESENT_MOD_FILE" in env, copy into place:
+		if modfile := os.Getenv("PRESENT_MOD_FILE"); modfile != "" {
+			data, err := os.ReadFile(modfile)
+			if err == nil {
+				os.WriteFile(filepath.Join(path, "go.mod"), data, 0666)
+			}
+			// also copy go.sum:
+			// replace 'mod' with 'sum' in modfile name:
+			sumFile := strings.Replace(modfile, "go.mod", "go.sum", 1)
+			data, err = os.ReadFile(sumFile)
+			if err == nil {
+				os.WriteFile(filepath.Join(path, "go.sum"), data, 0666)
+			}
+		}
+	}
 
 	// build x.go, creating x
 	args := []string{"go", "build", "-tags", "OMIT"}
@@ -395,12 +414,17 @@ func (p *process) start(body string, opt *Options) error {
 	}
 	args = append(args, "-o", bin)
 	cmd := p.cmd(path, args...)
-	if !hasModfile {
-		cmd.Env = append(cmd.Env, "GO111MODULE=off")
-	}
+	// if !hasModfile {
+	// 	cmd.Env = append(cmd.Env, "GO111MODULE=off")
+	// }
 	cmd.Stdout = cmd.Stderr // send compiler output to stderr
+	t1 := time.Now()
 	if err := cmd.Run(); err != nil {
 		return err
+	}
+	p.out <- &Message{
+		Kind: "stderr",
+		Body: fmt.Sprintf("Compile time: %v\n", time.Since(t1)),
 	}
 
 	// run x
