@@ -44,6 +44,8 @@
   }
 
   .slides > article {
+    /* place "gophereu.jpeg" in the top right of each of these, 50px/50px, not repeating */
+
     display: block;
 
     position: absolute;
@@ -90,9 +92,16 @@
     padding: 40px 160px;
   }
 
+  .slides > article:not(.background) {
+    background-image: url('gophereu.jpeg');
+    background-repeat: no-repeat;
+    background-position: right 20px top 20px;
+    background-size: 80px;
+  }
+
   .slides.layout-widescreen > article:not(.nobackground):not(.biglogo),
   .slides.layout-faux-widescreen > article:not(.nobackground):not(.biglogo) {
-    background-position-x: 0, 840px;
+    /* background-position-x: 0, 840px; */
   }
 
   /* Clickable/tappable areas */
@@ -465,6 +474,7 @@ div.output pre {
   width: 100%;
   height: 100%;
   overflow: auto;
+  white-space: pre-wrap;
 }
 div.output .stdout,
 div.output pre {
