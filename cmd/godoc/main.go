@@ -85,6 +85,9 @@ var (
 
 	// source code notes
 	notesRx = flag.String("notes", "BUG", "regular expression matching note markers to show")
+	
+	// build configuration
+	buildTags = flag.String("tags", "", "comma-separated list of build tags to consider satisfied during the build")
 )
 
 // An httpResponseRecorder is an http.ResponseWriter
@@ -293,6 +296,11 @@ func main() {
 	pres.DeclLinks = *declLinks
 	if *notesRx != "" {
 		pres.NotesRx = regexp.MustCompile(*notesRx)
+	}
+	
+	// Set build tags if provided
+	if *buildTags != "" {
+		pres.BuildTags = strings.Split(*buildTags, ",")
 	}
 
 	readTemplates(pres)

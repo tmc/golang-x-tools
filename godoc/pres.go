@@ -86,6 +86,10 @@ type Presentation struct {
 	// tracking ID to each page.
 	GoogleAnalytics string
 
+	// BuildTags optionally specifies a list of build tags to use when parsing
+	// Go source files. It controls which files are included based on build constraints.
+	BuildTags []string
+
 	initFuncMapOnce sync.Once
 	funcMap         template.FuncMap
 	templateFuncs   template.FuncMap

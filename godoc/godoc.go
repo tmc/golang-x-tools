@@ -625,11 +625,19 @@ func filterOutBuildAnnotations(cg []*ast.CommentGroup) []*ast.CommentGroup {
 	}
 
 	for i := range cg {
-		if !strings.HasPrefix(cg[i].Text(), "+build ") {
-			// Found the first non-build tag, return from here until the end
-			// of the slice.
-			return cg[i:]
+		// Check for old-style build constraints (+build)
+		if strings.HasPrefix(cg[i].Text(), "+build ") {
+			continue
 		}
+
+		// Check for new-style build constraints (//go:build)
+		if strings.HasPrefix(cg[i].Text(), "go:build ") {
+			continue
+		}
+
+		// Found the first non-build tag, return from here until the end
+		// of the slice.
+		return cg[i:]
 	}
 
 	// There weren't any non-build tags, return an empty slice.

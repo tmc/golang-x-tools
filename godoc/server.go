@@ -110,7 +110,42 @@ func (h *handlerServer) GetPageInfo(abspath, relpath string, mode PageInfoMode, 
 
 	// collect package files
 	pkgname := pkginfo.Name
+
+	// Start with all Go files from the build system
 	pkgfiles := append(pkginfo.GoFiles, pkginfo.CgoFiles...)
+
+	// When build tags are provided, also include:
+	// 1. Ignored files - these might have build tags that match
+	// 2. Other Go files - we need to examine all files
+	if len(h.p.BuildTags) > 0 {
+		// Add ignored Go files
+		pkgfiles = append(pkgfiles, pkginfo.IgnoredGoFiles...)
+
+		// Get a list of all Go files in the directory to ensure we're checking everything
+		// This ensures files with build tags are considered even if not reported by build package
+		files, err := h.c.fs.ReadDir(abspath)
+		if err == nil {
+			for _, f := range files {
+				if !f.IsDir() && strings.HasSuffix(f.Name(), ".go") {
+					// Check if this file is already in our list
+					found := false
+					for _, existing := range pkgfiles {
+						if existing == f.Name() {
+							found = true
+							break
+						}
+					}
+
+					if !found {
+						pkgfiles = append(pkgfiles, f.Name())
+					}
+				}
+			}
+		}
+
+
+	}
+
 	if len(pkgfiles) == 0 {
 		// Commands written in C have no .go files in the build.
 		// Instead, documentation may be found in an ignored file.
@@ -125,11 +160,14 @@ func (h *handlerServer) GetPageInfo(abspath, relpath string, mode PageInfoMode, 
 	if len(pkgfiles) > 0 {
 		// build package AST
 		fset := token.NewFileSet()
-		files, err := h.c.parseFiles(fset, relpath, abspath, pkgfiles)
+		log.Printf("DEBUG: GetPageInfo for %s with build tags: %v, pkgfiles: %v", relpath, h.p.BuildTags, pkgfiles)
+		files, err := h.c.parseFilesWithBuildTags(fset, relpath, abspath, pkgfiles, h.p.BuildTags)
 		if err != nil {
 			info.Err = err
 			return info
 		}
+
+		log.Printf("DEBUG: After parsing, got %d files for %s", len(files), relpath)
 
 		// ignore any errors - they are due to unresolved identifiers
 		pkg, _ := ast.NewPackage(fset, files, poorMansImporter, nil)
@@ -162,7 +200,7 @@ func (h *handlerServer) GetPageInfo(abspath, relpath string, mode PageInfoMode, 
 
 			// collect examples
 			testfiles := append(pkginfo.TestGoFiles, pkginfo.XTestGoFiles...)
-			files, err = h.c.parseFiles(fset, relpath, abspath, testfiles)
+			files, err = h.c.parseFilesWithBuildTags(fset, relpath, abspath, testfiles, h.p.BuildTags)
 			if err != nil {
 				log.Println("parsing examples:", err)
 			}

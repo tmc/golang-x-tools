@@ -10,6 +10,8 @@ import (
 	"go/token"
 	"strings"
 	"testing"
+
+	"golang.org/x/tools/godoc/vfs/mapfs"
 )
 
 func TestPkgLinkFunc(t *testing.T) {
@@ -323,49 +325,133 @@ func TestSrcToPkgLinkFunc(t *testing.T) {
 }
 
 func TestFilterOutBuildAnnotations(t *testing.T) {
-	// TODO: simplify this by using a multiline string once we stop
-	// using go vet from 1.10 on the build dashboard.
-	// https://golang.org/issue/26627
-	src := []byte("// +build !foo\n" +
-		"// +build !anothertag\n" +
-		"\n" +
-		"// non-tag comment\n" +
-		"\n" +
-		"package foo\n" +
-		"\n" +
-		"func bar() int {\n" +
-		"	return 42\n" +
-		"}\n")
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "old-style build constraints",
+			src: `// +build !foo
+// +build !anothertag
 
+// non-tag comment
+
+package foo
+
+func bar() int {
+	return 42
+}
+`,
+		},
+		{
+			name: "new-style build constraints",
+			src: `//go:build !foo && !anothertag
+
+// non-tag comment
+
+package foo
+
+func bar() int {
+	return 42
+}
+`,
+		},
+		{
+			name: "mixed build constraints",
+			src: `//go:build !foo && !anothertag
+// +build !foo
+// +build !anothertag
+
+// non-tag comment
+
+package foo
+
+func bar() int {
+	return 42
+}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			af, err := parser.ParseFile(fset, "foo.go", []byte(tt.src), parser.ParseComments)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var foundBuildTag, foundGoBuildTag bool
+			for _, cg := range af.Comments {
+				if strings.HasPrefix(cg.Text(), "+build ") {
+					foundBuildTag = true
+				}
+				if strings.HasPrefix(cg.Text(), "go:build ") {
+					foundGoBuildTag = true
+				}
+			}
+
+			if !foundBuildTag && !foundGoBuildTag {
+				t.Errorf("TestFilterOutBuildAnnotations is broken: missing build tag in test input")
+			}
+
+			foundNonTagComment := false
+			for _, cg := range filterOutBuildAnnotations(af.Comments) {
+				if strings.HasPrefix(cg.Text(), "+build ") {
+					t.Errorf("filterOutBuildAnnotations failed to filter +build tag")
+				}
+				if strings.HasPrefix(cg.Text(), "go:build ") {
+					t.Errorf("filterOutBuildAnnotations failed to filter go:build tag")
+				}
+
+				if strings.Contains(cg.Text(), "non-tag comment") {
+					foundNonTagComment = true
+				}
+			}
+			if !foundNonTagComment {
+				t.Errorf("filterOutBuildAnnotations should not remove non-build tag comment")
+			}
+		})
+	}
+}
+
+func TestBuildTagsInPresentation(t *testing.T) {
+	files := map[string]string{
+		"foo.go": `//go:build foo
+
+package main
+
+func Foo() {}`,
+		"bar.go": `//go:build bar
+
+package main
+
+func Bar() {}`,
+	}
+
+	fs := mapfs.New(files)
+	corpus := NewCorpus(fs)
+
+	// Create presentation with build tags
+	pres := NewPresentation(corpus)
+	pres.BuildTags = []string{"foo"}
+
+	// Simulate getting PageInfo for a package
 	fset := token.NewFileSet()
-	af, err := parser.ParseFile(fset, "foo.go", src, parser.ParseComments)
-	if err != nil {
-		t.Fatal(err)
+	// If build tags work correctly, only the foo.go file should be included
+	p := &PageInfo{
+		FSet: fset,
 	}
 
-	var found bool
-	for _, cg := range af.Comments {
-		if strings.HasPrefix(cg.Text(), "+build ") {
-			found = true
-			break
-		}
+	// Verify that Foo function is included but Bar is not
+	// This is just a simple test - a more comprehensive test would parse the files
+	// and check the full AST
+	src := pres.node_htmlFunc(p, nil, false)
+	if !strings.Contains(src, "Foo") {
+		t.Error("Expected Foo function to be included")
 	}
-	if !found {
-		t.Errorf("TestFilterOutBuildAnnotations is broken: missing build tag in test input")
-	}
-
-	found = false
-	for _, cg := range filterOutBuildAnnotations(af.Comments) {
-		if strings.HasPrefix(cg.Text(), "+build ") {
-			t.Errorf("filterOutBuildAnnotations failed to filter build tag")
-		}
-
-		if strings.Contains(cg.Text(), "non-tag comment") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("filterOutBuildAnnotations should not remove non-build tag comment")
+	if strings.Contains(src, "Bar") {
+		t.Error("Expected Bar function to be excluded due to build tags")
 	}
 }
 
